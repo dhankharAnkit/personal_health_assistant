@@ -231,6 +231,18 @@ fun HomeScreen(
   fun openAskImageChat() = openChatForTask(textChatTask)
   // New entry point: launches the multimodal "Ask Image" chat.
   fun openImageChat() = openChatForTask(imageChatTask)
+  // Scan Documents: resolve at click time so we don't capture a null task before allowlist loads.
+  fun openScanDocsChat() {
+    val task =
+      modelManagerViewModel.getTaskById(BuiltInTaskId.SCAN_DOCS)
+        ?: modelManagerViewModel.getCustomTaskByTaskId(BuiltInTaskId.SCAN_DOCS)?.task
+    if (task != null) {
+      openChatForTask(task)
+    } else {
+      // Fallback: image chat still supports photo/PDF upload if Scan Docs isn't registered yet.
+      openImageChat()
+    }
+  }
 
   // Show home screen content when TOS has been accepted.
   if (!showTosDialog) {
@@ -377,7 +389,7 @@ fun HomeScreen(
                     modifier = Modifier.weight(1f),
                     actionText = "Upload & Analyze",
                     actionColor = SukhamColors.LavenderBtn,
-                    onClick = { openAskImageChat() }
+                    onClick = { openScanDocsChat() }
                 )
             }
 

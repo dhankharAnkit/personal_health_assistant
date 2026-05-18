@@ -87,6 +87,7 @@ import com.google.ai.edge.gallery.ui.modelmanager.GlobalModelManager
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManager
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.yoga.YogaPoseScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -97,6 +98,7 @@ private const val ROUTE_MODEL_LIST = "model_list"
 private const val ROUTE_MODEL = "route_model"
 private const val ROUTE_BENCHMARK = "benchmark"
 private const val ROUTE_MODEL_MANAGER = "model_manager"
+private const val ROUTE_YOGA = "yoga_coach"
 private const val ENTER_ANIMATION_DURATION_MS = 500
 private val ENTER_ANIMATION_EASING = EaseOutExpo
 private const val ENTER_ANIMATION_DELAY_MS = 100
@@ -208,7 +210,20 @@ fun GalleryNavHost(
           navController.navigate("$ROUTE_MODEL/${task.id}/${model.name}")
         },
         onModelsClicked = { navController.navigate(ROUTE_MODEL_MANAGER) },
+        onYogaClicked = { navController.navigate(ROUTE_YOGA) },
         gm4 = false,
+      )
+    }
+
+    // Yoga pose coach screen.
+    composable(
+      route = ROUTE_YOGA,
+      enterTransition = { slideEnter() },
+      exitTransition = { slideExit() },
+    ) {
+      YogaPoseScreen(
+        modelManagerViewModel = modelManagerViewModel,
+        onNavigateUp = { navController.navigateUp() },
       )
     }
 

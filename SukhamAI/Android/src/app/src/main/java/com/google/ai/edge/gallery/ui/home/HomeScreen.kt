@@ -195,6 +195,7 @@ fun HomeScreen(
   navigateToTaskScreen: (Task) -> Unit,
   navigateToModelScreen: (Task, Model) -> Unit,
   onModelsClicked: () -> Unit,
+  onYogaClicked: () -> Unit = {},
   enableAnimation: Boolean,
   modifier: Modifier = Modifier,
   gm4: Boolean = false,
@@ -347,14 +348,14 @@ fun HomeScreen(
                 )
                 SukhamGridCard(
                     title = "Yoga Tips",
-                    subtitle = "Daily guidance for body, mind & soul.",
+                    subtitle = "Snap a pose. Get AI form feedback.",
                     imageRes = R.drawable.yoga_tips,
                     modifier = Modifier.weight(1f),
                     icon = Icons.Outlined.Eco,
                     iconTint = Color(0xFF8D6E63),
-                    actionText = "View Tips",
+                    actionText = "Analyze Pose",
                     actionColor = SukhamColors.Peach,
-                    onClick = { openAskImageChat() }
+                    onClick = { onYogaClicked() }
                 )
             }
 

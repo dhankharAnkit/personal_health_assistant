@@ -204,11 +204,23 @@ fun HomeScreen(
   val scope = rememberCoroutineScope()
   val context = LocalContext.current
 
-  fun openChat(task: Task?) {
-    if (task == null || uiState.loadingModelAllowlist) return
-    val targetModel = modelManagerViewModel.resolveModelForTask(task)
-    if (targetModel != null) {
-      navigateToModelScreen(task, targetModel)
+  // Route Sukham chat shortcuts to the text-only LLM_CHAT task. Image chat (LLM_ASK_IMAGE)
+  // also loads a vision tower, pushing peak RSS to ~6 GB which the OS LMK kills mid-init on
+  // most 8/12 GB devices. Text chat is what gallery's "AI Chat" tile uses and what is known to
+  // run reliably on this hardware.
+  val askImageTask = modelManagerViewModel.getTaskById(BuiltInTaskId.LLM_CHAT)
+
+  // Open the LLM chat: kick off the model download if it is not present yet, then navigate to
+  // the model screen so the user sees the download progress / chat UI.
+  fun openAskImageChat() {
+    val task = askImageTask ?: return
+    val model = modelManagerViewModel.resolveModelForTask(task)
+    if (model != null) {
+      modelManagerViewModel.selectModel(model)
+      if (!modelManagerViewModel.isModelDownloaded(model)) {
+          modelManagerViewModel.downloadModel(task, model)
+      }
+      navigateToModelScreen(task, model)
     } else {
       navigateToTaskScreen(task)
     }
@@ -278,11 +290,7 @@ fun HomeScreen(
             SukhamHeader(onMenuClick = { scope.launch { drawerState.open() } })
           },
           bottomBar = { 
-              SukhamBottomNav(
-                  onCentralClick = { 
-                      openChat(modelManagerViewModel.getTaskById(BuiltInTaskId.LLM_CHAT))
-                  }
-              ) 
+              SukhamBottomNav(onCentralClick = { openAskImageChat() }) 
           }
         ) { innerPadding ->
           Column(
@@ -312,11 +320,8 @@ fun HomeScreen(
               )
             }
 
-            val chatTask = modelManagerViewModel.getTaskById(BuiltInTaskId.LLM_CHAT)
-            val imageChatTask = modelManagerViewModel.getTaskById(BuiltInTaskId.LLM_ASK_IMAGE)
-
-            if (chatTask != null) {
-                SukhamMainChatCard(onClick = { openChat(chatTask) })
+            if (askImageTask != null) {
+                SukhamMainChatCard(onClick = { openAskImageChat() })
             }
 
             // Grid Section
@@ -330,7 +335,7 @@ fun HomeScreen(
                     badgeColor = SukhamColors.LiveGreen,
                     actionText = "Join Live",
                     actionColor = SukhamColors.Teal,
-                    onClick = { openChat(chatTask) }
+                    onClick = { openAskImageChat() }
                 )
                 SukhamGridCard(
                     title = "Yoga Tips",
@@ -341,7 +346,7 @@ fun HomeScreen(
                     iconTint = Color(0xFF8D6E63),
                     actionText = "View Tips",
                     actionColor = SukhamColors.Peach,
-                    onClick = { openChat(chatTask) }
+                    onClick = { openAskImageChat() }
                 )
             }
 
@@ -353,7 +358,7 @@ fun HomeScreen(
                     modifier = Modifier.weight(1f),
                     actionText = "View Insights",
                     actionColor = SukhamColors.LightBlue,
-                    onClick = { openChat(imageChatTask) }
+                    onClick = { openAskImageChat() }
                 )
                 // Personal Files Analysis
                 SukhamGridCard(
@@ -363,7 +368,7 @@ fun HomeScreen(
                     modifier = Modifier.weight(1f),
                     actionText = "Upload & Analyze",
                     actionColor = SukhamColors.LavenderBtn,
-                    onClick = { openChat(imageChatTask) }
+                    onClick = { openAskImageChat() }
                 )
             }
 

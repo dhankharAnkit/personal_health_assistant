@@ -82,82 +82,7 @@ private const val MODEL_ALLOWLIST_TEST_FILENAME = "model_allowlist_test.json"
 private const val ALLOWLIST_BASE_URL =
   "https://raw.githubusercontent.com/google-ai-edge/gallery/refs/heads/main/model_allowlists"
 
-private const val TEST_MODEL_ALLOW_LIST = """
-{
-  "models": [
-    {
-      "name": "Gemma-3n-E2B-it-int4",
-      "modelId": "google/gemma-3n-E2B-it-litert-preview",
-      "modelFile": "gemma-3n-E2B-it-int4.task",
-      "description": "Preview version of Gemma 3n E2B ready for deployment on Android using the MediaPipe LLM Inference API. The current checkpoint only supports text and vision input, with 4096 context length.",
-      "sizeInBytes": 3136226711,
-      "estimatedPeakMemoryInBytes": 5905580032,
-      "version": "20250520",
-      "llmSupportImage": true,
-      "defaultConfig": {
-        "topK": 64,
-        "topP": 0.95,
-        "temperature": 1.0,
-        "maxTokens": 4096,
-        "accelerators": "cpu,gpu"
-      },
-      "taskTypes": ["llm_chat", "llm_prompt_lab", "llm_ask_image"]
-    },
-    {
-      "name": "Gemma-4-Multimodal",
-      "modelId": "google/gemma-3n-E4B-it-litert-preview",
-      "modelFile": "gemma-3n-E4B-it-int4.task",
-      "description": "Gemma 4 Multimodal model for image and text on-device inference.",
-      "sizeInBytes": 4405655031,
-      "estimatedPeakMemoryInBytes": 6979321856,
-      "version": "20250520",
-      "llmSupportImage": true,
-      "defaultConfig": {
-        "topK": 64,
-        "topP": 0.95,
-        "temperature": 1.0,
-        "maxTokens": 4096,
-        "accelerators": "gpu"
-      },
-      "taskTypes": ["llm_chat", "llm_prompt_lab", "llm_ask_image"]
-    },
-    {
-      "name": "Gemma3-1B-IT q4",
-      "modelId": "litert-community/Gemma3-1B-IT",
-      "modelFile": "Gemma3-1B-IT_multi-prefill-seq_q4_ekv2048.task",
-      "description": "A variant of google/Gemma-3-1B-IT with 4-bit quantization ready for deployment on Android using the MediaPipe LLM Inference API",
-      "sizeInBytes": 554661246,
-      "estimatedPeakMemoryInBytes": 2147483648,
-      "version": "20250514",
-      "defaultConfig": {
-        "topK": 64,
-        "topP": 0.95,
-        "temperature": 1.0,
-        "maxTokens": 1024,
-        "accelerators": "gpu,cpu"
-      },
-      "taskTypes": ["llm_chat", "llm_prompt_lab"]
-    },
-    {
-      "name": "Qwen2.5-1.5B-Instruct q8",
-      "modelId": "litert-community/Qwen2.5-1.5B-Instruct",
-      "modelFile": "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
-      "description": "A variant of Qwen/Qwen2.5-1.5B-Instruct with 8-bit quantization ready for deployment on Android using the MediaPipe LLM Inference API",
-      "sizeInBytes": 1625493432,
-      "estimatedPeakMemoryInBytes": 2684354560,
-      "version": "20250514",
-      "defaultConfig": {
-        "topK": 40,
-        "topP": 0.95,
-        "temperature": 1.0,
-        "maxTokens": 1024,
-        "accelerators": "cpu"
-      },
-      "taskTypes": ["llm_chat", "llm_prompt_lab"]
-    }
-  ]
-}
-"""
+private const val TEST_MODEL_ALLOW_LIST = ""
 
 data class ModelInitializationStatus(
   val status: ModelInitializationStatusType,
@@ -291,23 +216,41 @@ constructor(
 
   /**
    * Picks the best on-device model for a task when launching chat from Sukham home shortcuts.
-   * Prefers Gemma 4 multimodal models, then other image-capable models for vision tasks.
+   *
+   * Sukham intentionally caps at the 2B-parameter Gemma tier: the 4B variants peak around
+   * ~7 GB of RSS at init and get killed by the Android low-memory killer on most 8–12 GB
+   * phones (including the Galaxy S20+ we target). The order below is "smallest 2B first",
+   * then we explicitly skip anything that looks like a 4B model before falling back to the
+   * smallest remaining model in the task.
    */
   fun resolveModelForTask(task: Task): Model? {
-    val preferredNames =
+    val preferred2B =
       listOf(
-        "Gemma-4-E4B-it",
-        "Gemma-4-E2B-it",
-        "Gemma-3n-E4B-it-int4",
         "Gemma-3n-E2B-it-int4",
+        "Gemma-2B-Multimodal",
+        "Gemma-4-E2B-it",
+        "Gemma3-1B-IT q4",
       )
-    for (name in preferredNames) {
+    for (name in preferred2B) {
       task.models.find { it.name == name }?.let { return it }
     }
-    if (task.id == BuiltInTaskId.LLM_ASK_IMAGE) {
-      return task.models.find { it.llmSupportImage } ?: task.models.firstOrNull()
+
+    fun isTooLarge(model: Model): Boolean {
+      val n = model.name.lowercase()
+      return n.contains("e4b") ||
+        n.contains("-4b") ||
+        n.contains("gemma-4-multimodal") ||
+        n.contains("gemma3-4b") ||
+        n.contains("gemma-4b")
     }
-    return task.models.firstOrNull()
+
+    val safeModels = task.models.filterNot { isTooLarge(it) }
+    val pool = if (safeModels.isNotEmpty()) safeModels else task.models
+    if (task.id == BuiltInTaskId.LLM_ASK_IMAGE) {
+      return pool.find { it.llmSupportImage } ?: pool.firstOrNull()
+    }
+    return pool.minByOrNull { if (it.sizeInBytes > 0) it.sizeInBytes else Long.MAX_VALUE }
+      ?: pool.firstOrNull()
   }
 
   fun getTasksByIds(ids: Set<String>): List<Task> {
@@ -356,9 +299,6 @@ constructor(
 
   fun processTasks() {
     val curTasks = getActiveCustomTasks().map { it.task }
-    for ((index, task) in curTasks.withIndex()) {
-      task.index = index
-    }
     for (task in curTasks) {
       for (model in task.models) {
         model.preProcess()
@@ -983,7 +923,7 @@ constructor(
 
   fun loadModelAllowlist() {
     _uiState.update {
-      uiState.value.copy(loadingModelAllowlist = true)
+      uiState.value.copy(loadingModelAllowlist = true, loadingModelAllowlistError = "")
     }
 
     viewModelScope.launch(Dispatchers.IO) {
@@ -994,7 +934,11 @@ constructor(
         // Load model allowlist json.
         var modelAllowlist: ModelAllowlist? = null
 
-        // Priority 1: Local test string (Fastest and Guaranteed)
+        // Try to read the test allowlist first.
+        Log.d(TAG, "Loading test model allowlist.")
+        modelAllowlist = readModelAllowlistFromDisk(fileName = MODEL_ALLOWLIST_TEST_FILENAME)
+
+        // Local test only.
         if (TEST_MODEL_ALLOW_LIST.isNotEmpty()) {
           Log.d(TAG, "Loading local model allowlist for testing.")
           val gson = Gson()
@@ -1005,13 +949,6 @@ constructor(
           }
         }
 
-        // Priority 2: Disk cache
-        if (modelAllowlist == null) {
-          Log.d(TAG, "Loading test model allowlist.")
-          modelAllowlist = readModelAllowlistFromDisk(fileName = MODEL_ALLOWLIST_TEST_FILENAME)
-        }
-
-        // Priority 3: Internet
         if (modelAllowlist == null) {
           // Load from github.
           var version = BuildConfig.VERSION_NAME.replace(".", "_")
@@ -1030,8 +967,9 @@ constructor(
         }
 
         if (modelAllowlist == null) {
-          Log.e(TAG, "Failed to load model allowlist")
-          _uiState.update { uiState.value.copy(loadingModelAllowlist = false) }
+          _uiState.update {
+            uiState.value.copy(loadingModelAllowlistError = "Failed to load model list")
+          }
           return@launch
         }
 
@@ -1195,10 +1133,9 @@ constructor(
   }
 
   private fun createEmptyUiState(): ModelManagerUiState {
-    val tasks = getActiveCustomTasks().map { it.task }
     return ModelManagerUiState(
-      tasks = tasks,
-      tasksByCategory = tasks.groupBy { it.category.id },
+      tasks = listOf(),
+      tasksByCategory = mapOf(),
       modelDownloadStatus = mapOf(),
       modelInitializationStatus = mapOf(),
     )

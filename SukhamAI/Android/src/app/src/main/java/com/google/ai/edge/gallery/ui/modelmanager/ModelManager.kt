@@ -22,15 +22,21 @@ package com.google.ai.edge.gallery.ui.modelmanager
 // import com.google.ai.edge.gallery.ui.theme.GalleryTheme
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.padding
 import com.google.ai.edge.gallery.GalleryTopAppBar
 import com.google.ai.edge.gallery.data.AppBarAction
 import com.google.ai.edge.gallery.data.AppBarActionType
@@ -63,9 +69,11 @@ fun ModelManager(
     }
   }
 
-  // Navigate up when there are no models left.
-  LaunchedEffect(modelCount) {
-    if (modelCount == 0) {
+  val uiState by viewModel.uiState.collectAsState()
+
+  // Only leave when allowlist finished loading and this task truly has no models.
+  LaunchedEffect(modelCount, uiState.loadingModelAllowlist) {
+    if (modelCount == 0 && !uiState.loadingModelAllowlist) {
       navigateUp()
     }
   }
@@ -82,14 +90,24 @@ fun ModelManager(
       )
     },
   ) { innerPadding ->
-    ModelList(
-      task = task,
-      modelManagerViewModel = viewModel,
-      contentPadding = innerPadding,
-      enableAnimation = enableAnimation,
-      onModelClicked = onModelClicked,
-      onBenchmarkClicked = onBenchmarkClicked,
-      modifier = Modifier.fillMaxSize(),
-    )
+    if (modelCount == 0 && uiState.loadingModelAllowlist) {
+      Box(modifier = Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
+      }
+    } else if (modelCount == 0) {
+      Box(modifier = Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
+        Text("No models available. Check your connection and try again.")
+      }
+    } else {
+      ModelList(
+        task = task,
+        modelManagerViewModel = viewModel,
+        contentPadding = innerPadding,
+        enableAnimation = enableAnimation,
+        onModelClicked = onModelClicked,
+        onBenchmarkClicked = onBenchmarkClicked,
+        modifier = Modifier.fillMaxSize(),
+      )
+    }
   }
 }

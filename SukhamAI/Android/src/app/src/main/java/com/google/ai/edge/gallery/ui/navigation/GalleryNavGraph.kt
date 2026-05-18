@@ -36,12 +36,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
@@ -77,7 +72,6 @@ import androidx.navigation.navArgument
 import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskData
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskDataForBuiltinTask
-import com.google.ai.edge.gallery.data.EMPTY_MODEL
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.Task
@@ -150,8 +144,6 @@ private fun AnimatedContentTransitionScope<*>.slideDownExit(): ExitTransition {
   )
 }
 
-private fun modelRoute(taskId: String): String = "$ROUTE_MODEL/$taskId"
-
 /** Navigation routes. */
 @Composable
 fun GalleryNavHost(
@@ -164,6 +156,7 @@ fun GalleryNavHost(
   var pickedTask by remember { mutableStateOf<Task?>(null) }
   var enableHomeScreenAnimation by remember { mutableStateOf(true) }
   var enableModelListAnimation by remember { mutableStateOf(true) }
+  var lastNavigatedModelName = remember { "" }
 
   // Track whether app is in foreground.
   DisposableEffect(lifecycleOwner) {
@@ -210,11 +203,9 @@ fun GalleryNavHost(
           )
         },
         navigateToModelScreen = { task, model ->
-            pickedTask = task
-            modelManagerViewModel.selectModel(model)
-            navController.navigate(modelRoute(task.id)) {
-              launchSingleTop = true
-            }
+          pickedTask = task
+          modelManagerViewModel.selectModel(model)
+          navController.navigate("$ROUTE_MODEL/${task.id}/${model.name}")
         },
         onModelsClicked = { navController.navigate(ROUTE_MODEL_MANAGER) },
         gm4 = false,
@@ -245,8 +236,7 @@ fun GalleryNavHost(
           task = it,
           enableAnimation = enableModelListAnimation,
           onModelClicked = { model ->
-            modelManagerViewModel.selectModel(model)
-            navController.navigate(modelRoute(it.id)) { launchSingleTop = true }
+            navController.navigate("$ROUTE_MODEL/${it.id}/${model.name}")
           },
           onBenchmarkClicked = { model ->
             firebaseAnalytics?.logEvent(
@@ -263,94 +253,86 @@ fun GalleryNavHost(
       }
     }
 
-    // Model page (model is passed via ModelManagerViewModel.selectModel before navigate).
+    // Model page.
     composable(
-      route = "$ROUTE_MODEL/{taskId}",
-      arguments = listOf(navArgument("taskId") { type = NavType.StringType }),
+      route = "$ROUTE_MODEL/{taskId}/{modelName}",
+      arguments =
+        listOf(
+          navArgument("taskId") { type = NavType.StringType },
+          navArgument("modelName") { type = NavType.StringType },
+        ),
       enterTransition = { slideEnter() },
       exitTransition = { slideExit() },
     ) { backStackEntry ->
+      val modelName = backStackEntry.arguments?.getString("modelName") ?: ""
       val taskId = backStackEntry.arguments?.getString("taskId") ?: ""
       val scope = rememberCoroutineScope()
       val context = LocalContext.current
-      val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
-      val selectedModel = modelManagerUiState.selectedModel
-      val task = modelManagerViewModel.getTaskById(id = taskId)
-      val modelReady =
-        selectedModel != EMPTY_MODEL &&
-          task?.models?.any { it.name == selectedModel.name } == true
 
-      if (!modelReady) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-          if (modelManagerUiState.loadingModelAllowlist) {
-            CircularProgressIndicator()
-          } else {
-            TextButton(
-              onClick = {
-                enableModelListAnimation = false
-                navController.navigateUp()
-              }
-            ) {
-              Text("Models are loading. Tap to go back.")
-            }
-          }
+      modelManagerViewModel.getModelByName(name = modelName)?.let { initialModel ->
+        if (lastNavigatedModelName != modelName) {
+          modelManagerViewModel.selectModel(initialModel)
+          lastNavigatedModelName = modelName
         }
-        return@composable
-      }
 
-      val customTask = modelManagerViewModel.getCustomTaskByTaskId(id = taskId)
-      if (customTask != null) {
-        val onNavUp: () -> Unit = {
-          enableModelListAnimation = false
-          navController.navigateUp()
-        }
-        if (isLegacyTasks(customTask.task.id)) {
-          customTask.MainScreen(
-            data =
-              CustomTaskDataForBuiltinTask(
-                modelManagerViewModel = modelManagerViewModel,
-                onNavUp = onNavUp,
-              )
-          )
-        } else {
-          var disableAppBarControls by remember { mutableStateOf(false) }
-          var hideTopBar by remember { mutableStateOf(false) }
-          var customNavigateUpCallback by remember { mutableStateOf<(() -> Unit)?>(null) }
-          CustomTaskScreen(
-            task = customTask.task,
-            modelManagerViewModel = modelManagerViewModel,
-            onNavigateUp = {
-              if (customNavigateUpCallback != null) {
-                customNavigateUpCallback?.invoke()
-              } else {
-                onNavUp()
-                for (curModel in customTask.task.models) {
-                  val instanceToCleanUp = curModel.instance
-                  scope.launch(Dispatchers.Default) {
-                    modelManagerViewModel.cleanupModel(
-                      context = context,
-                      task = customTask.task,
-                      model = curModel,
-                      instanceToCleanUp = instanceToCleanUp,
-                    )
-                  }
-                }
-              }
-            },
-            disableAppBarControls = disableAppBarControls,
-            hideTopBar = hideTopBar,
-            useThemeColor = customTask.task.useThemeColor,
-          ) { bottomPadding ->
+        val customTask = modelManagerViewModel.getCustomTaskByTaskId(id = taskId)
+        if (customTask != null) {
+          if (isLegacyTasks(customTask.task.id)) {
             customTask.MainScreen(
               data =
-                CustomTaskData(
+                CustomTaskDataForBuiltinTask(
                   modelManagerViewModel = modelManagerViewModel,
-                  bottomPadding = bottomPadding,
-                  setAppBarControlsDisabled = { disableAppBarControls = it },
-                  setTopBarVisible = { hideTopBar = !it },
-                  setCustomNavigateUpCallback = { customNavigateUpCallback = it },
+                  onNavUp = {
+                    enableModelListAnimation = false
+                    lastNavigatedModelName = ""
+                    navController.navigateUp()
+                  },
                 )
             )
+          } else {
+            var disableAppBarControls by remember { mutableStateOf(false) }
+            var hideTopBar by remember { mutableStateOf(false) }
+            var customNavigateUpCallback by remember { mutableStateOf<(() -> Unit)?>(null) }
+            CustomTaskScreen(
+              task = customTask.task,
+              modelManagerViewModel = modelManagerViewModel,
+              onNavigateUp = {
+                if (customNavigateUpCallback != null) {
+                  customNavigateUpCallback?.invoke()
+                } else {
+                  enableModelListAnimation = false
+                  lastNavigatedModelName = ""
+                  navController.navigateUp()
+
+                  // clean up all models.
+                  for (curModel in customTask.task.models) {
+                    val instanceToCleanUp = curModel.instance
+                    scope.launch(Dispatchers.Default) {
+                      modelManagerViewModel.cleanupModel(
+                        context = context,
+                        task = customTask.task,
+                        model = curModel,
+                        instanceToCleanUp = instanceToCleanUp,
+                      )
+                    }
+                  }
+                }
+              },
+              disableAppBarControls = disableAppBarControls,
+              hideTopBar = hideTopBar,
+              useThemeColor = customTask.task.useThemeColor,
+            ) { bottomPadding ->
+              customTask.MainScreen(
+                data =
+                  CustomTaskData(
+                    modelManagerViewModel = modelManagerViewModel,
+                    bottomPadding = bottomPadding,
+                    setAppBarControlsDisabled = { disableAppBarControls = it },
+                    setTopBarVisible = { hideTopBar = !it },
+                    setCustomNavigateUpCallback = { customNavigateUpCallback = it },
+                  )
+              )
+            }
           }
         }
       }
@@ -387,8 +369,7 @@ fun GalleryNavHost(
           navController.navigateUp()
         },
         onModelSelected = { task, model ->
-          modelManagerViewModel.selectModel(model)
-          navController.navigate(modelRoute(task.id)) { launchSingleTop = true }
+          navController.navigate("$ROUTE_MODEL/${task.id}/${model.name}")
         },
         onBenchmarkClicked = { model ->
           firebaseAnalytics?.logEvent(
@@ -433,8 +414,7 @@ fun GalleryNavHost(
         val taskId = data.pathSegments.get(data.pathSegments.size - 2)
         val modelName = data.pathSegments.last()
         modelManagerViewModel.getModelByName(name = modelName)?.let { model ->
-          modelManagerViewModel.selectModel(model)
-          navController.navigate(modelRoute(taskId)) { launchSingleTop = true }
+          navController.navigate("$ROUTE_MODEL/${taskId}/${model.name}")
         }
       } else {
         Log.e(TAG, "Malformed deep link URI received: $data")

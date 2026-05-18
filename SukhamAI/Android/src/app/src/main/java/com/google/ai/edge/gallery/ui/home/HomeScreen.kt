@@ -196,6 +196,7 @@ fun HomeScreen(
   navigateToModelScreen: (Task, Model) -> Unit,
   onModelsClicked: () -> Unit,
   onYogaClicked: () -> Unit = {},
+  onWearablesClicked: () -> Unit = {},
   enableAnimation: Boolean,
   modifier: Modifier = Modifier,
   gm4: Boolean = false,
@@ -206,11 +207,9 @@ fun HomeScreen(
   val scope = rememberCoroutineScope()
   val context = LocalContext.current
 
-  // Text-only chat (gallery's "AI Chat" equivalent) — peaks at ~3 GB working set with Gemma-3n-E2B.
-  val textChatTask = modelManagerViewModel.getTaskById(BuiltInTaskId.LLM_CHAT)
-  // Image chat (gallery's "Ask Image" equivalent) — same 2B Gemma but with the vision tower
-  // enabled. resolveModelForTask refuses to escalate to the 4B variant so we stay within the
-  // S20+ memory envelope while still supporting image inputs.
+  // SUKHAM AI now standardises on the multimodal "Ask Image" chat — same 2B Gemma but with
+  // the vision tower enabled. resolveModelForTask refuses to escalate to the 4B variant so we
+  // stay within the S20+ memory envelope while still supporting image inputs.
   val imageChatTask = modelManagerViewModel.getTaskById(BuiltInTaskId.LLM_ASK_IMAGE)
 
   fun openChatForTask(task: Task?) {
@@ -227,9 +226,7 @@ fun HomeScreen(
     }
   }
 
-  // Existing call sites (bottom nav, wellness tiles) keep routing to the lighter text chat.
-  fun openAskImageChat() = openChatForTask(textChatTask)
-  // New entry point: launches the multimodal "Ask Image" chat.
+  // The header card, bottom-nav central button, and wellness tiles all open the image chat.
   fun openImageChat() = openChatForTask(imageChatTask)
 
   // Show home screen content when TOS has been accepted.
@@ -296,7 +293,7 @@ fun HomeScreen(
             SukhamHeader(onMenuClick = { scope.launch { drawerState.open() } })
           },
           bottomBar = { 
-              SukhamBottomNav(onCentralClick = { openAskImageChat() }) 
+              SukhamBottomNav(onCentralClick = { openImageChat() }) 
           }
         ) { innerPadding ->
           Column(
@@ -326,11 +323,8 @@ fun HomeScreen(
               )
             }
 
-            if (textChatTask != null) {
-                SukhamMainChatCard(onClick = { openAskImageChat() })
-            }
             if (imageChatTask != null) {
-                SukhamAskImageCard(onClick = { openImageChat() })
+                SukhamMainChatCard(onClick = { openImageChat() })
             }
 
             // Grid Section
@@ -344,7 +338,7 @@ fun HomeScreen(
                     badgeColor = SukhamColors.LiveGreen,
                     actionText = "Join Live",
                     actionColor = SukhamColors.Teal,
-                    onClick = { openAskImageChat() }
+                    onClick = { openImageChat() }
                 )
                 SukhamGridCard(
                     title = "Yoga Tips",
@@ -367,7 +361,7 @@ fun HomeScreen(
                     modifier = Modifier.weight(1f),
                     actionText = "View Insights",
                     actionColor = SukhamColors.LightBlue,
-                    onClick = { openAskImageChat() }
+                    onClick = { onWearablesClicked() }
                 )
                 // Personal Files Analysis
                 SukhamGridCard(
@@ -377,7 +371,7 @@ fun HomeScreen(
                     modifier = Modifier.weight(1f),
                     actionText = "Upload & Analyze",
                     actionColor = SukhamColors.LavenderBtn,
-                    onClick = { openAskImageChat() }
+                    onClick = { openImageChat() }
                 )
             }
 
@@ -465,7 +459,7 @@ fun SukhamMainChatCard(onClick: () -> Unit) {
                     ),
                 )
                 Text(
-                    "Your personal wellness guide. Ask anything, anytime.",
+                    "Ask anything. Share a photo, report or scan for on-device analysis.",
                     style = MaterialTheme.typography.bodyMedium.copy(color = SukhamColors.BodyGray),
                 )
             }
@@ -480,55 +474,6 @@ fun SukhamMainChatCard(onClick: () -> Unit) {
                     "Start Chat",
                     style = MaterialTheme.typography.labelSmall.copy(color = SukhamColors.TitleBlack),
                 )
-            }
-        }
-    }
-}
-
-@Composable
-fun SukhamAskImageCard(onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().height(120.dp).clickable(onClick = onClick),
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = SukhamColors.Peach)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier.size(64.dp).background(
-                    brush = Brush.radialGradient(listOf(Color(0xFFFFE0B2), SukhamColors.PurpleDark)),
-                    shape = CircleShape
-                ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Mms,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp),
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "Ask SUKHAM about an Image",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = SukhamColors.TitleBlack,
-                    ),
-                )
-                Text(
-                    "Upload a photo, report or scan and get on-device AI analysis.",
-                    style = MaterialTheme.typography.bodySmall.copy(color = SukhamColors.BodyGray),
-                )
-            }
-            IconButton(
-                onClick = onClick,
-                modifier = Modifier.size(44.dp).background(SukhamColors.PurpleDark, CircleShape)
-            ) {
-                Icon(Icons.Outlined.Mms, contentDescription = null, tint = Color.White)
             }
         }
     }

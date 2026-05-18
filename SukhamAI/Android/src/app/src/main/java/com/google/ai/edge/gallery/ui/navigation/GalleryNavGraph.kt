@@ -87,6 +87,7 @@ import com.google.ai.edge.gallery.ui.modelmanager.GlobalModelManager
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManager
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.wearables.WearablesAnalysisScreen
 import com.google.ai.edge.gallery.ui.yoga.YogaPoseScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -99,6 +100,7 @@ private const val ROUTE_MODEL = "route_model"
 private const val ROUTE_BENCHMARK = "benchmark"
 private const val ROUTE_MODEL_MANAGER = "model_manager"
 private const val ROUTE_YOGA = "yoga_coach"
+private const val ROUTE_WEARABLES = "wearables_insights"
 private const val ENTER_ANIMATION_DURATION_MS = 500
 private val ENTER_ANIMATION_EASING = EaseOutExpo
 private const val ENTER_ANIMATION_DELAY_MS = 100
@@ -211,6 +213,7 @@ fun GalleryNavHost(
         },
         onModelsClicked = { navController.navigate(ROUTE_MODEL_MANAGER) },
         onYogaClicked = { navController.navigate(ROUTE_YOGA) },
+        onWearablesClicked = { navController.navigate(ROUTE_WEARABLES) },
         gm4 = false,
       )
     }
@@ -222,6 +225,18 @@ fun GalleryNavHost(
       exitTransition = { slideExit() },
     ) {
       YogaPoseScreen(
+        modelManagerViewModel = modelManagerViewModel,
+        onNavigateUp = { navController.navigateUp() },
+      )
+    }
+
+    // Wearables analysis screen.
+    composable(
+      route = ROUTE_WEARABLES,
+      enterTransition = { slideEnter() },
+      exitTransition = { slideExit() },
+    ) {
+      WearablesAnalysisScreen(
         modelManagerViewModel = modelManagerViewModel,
         onNavigateUp = { navController.navigateUp() },
       )
